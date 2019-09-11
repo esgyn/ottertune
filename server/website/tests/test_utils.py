@@ -8,6 +8,7 @@ import string
 import numpy as np
 from django.test import TestCase
 from website.utils import JSONUtil, MediaUtil, DataUtil, ConversionUtil, LabelUtil, TaskUtil
+from website.parser.postgres import PostgresParser
 from website.types import LabelStyleType, VarType
 from website.models import Result, DBMSCatalog
 
@@ -224,9 +225,9 @@ class DataUtilTest(TestCase):
                           'global.bgwriter_delay',
                           'global.wal_writer_delay',
                           'global.work_mem']
-        postgresdb = DBMSCatalog.objects.get(pk=1)
+        postgres96 = DBMSCatalog.objects.get(pk=1)
         categorical_info = DataUtil.dummy_encoder_helper(featured_knobs,
-                                                         dbms=postgresdb)
+                                                         dbms=postgres96)
         self.assertEqual(len(categorical_info['n_values']), 0)
         self.assertEqual(len(categorical_info['categorical_features']), 0)
         self.assertEqual(categorical_info['cat_columnlabels'], [])
@@ -238,9 +239,9 @@ class DataUtilTest(TestCase):
                           'global.wal_writer_delay',
                           'global.work_mem',
                           'global.wal_sync_method']  # last knob categorical
-        postgresdb = DBMSCatalog.objects.get(pk=1)
+        postgres96 = DBMSCatalog.objects.get(pk=1)
         categorical_info = DataUtil.dummy_encoder_helper(featured_knobs,
-                                                         dbms=postgresdb)
+                                                         dbms=postgres96)
         self.assertEqual(len(categorical_info['n_values']), 1)
         self.assertEqual(categorical_info['n_values'][0], 4)
         self.assertEqual(len(categorical_info['categorical_features']), 1)
@@ -256,7 +257,7 @@ class ConversionUtilTest(TestCase):
         byte_ans = [1024**5, 2 * 1024**4, 3 * 1024**3, 4 * 1024**2, 5 * 1024**1, 6]
         for i, byte_test in enumerate(byte_test_convert):
             byte_conversion = ConversionUtil.get_raw_size(
-                byte_test, system=ConversionUtil.DEFAULT_BYTES_SYSTEM)
+                byte_test, system=PostgresParser.POSTGRES_BYTES_SYSTEM)
             self.assertEqual(byte_conversion, byte_ans[i])
 
         # Time - In Milliseconds
@@ -264,7 +265,7 @@ class ConversionUtilTest(TestCase):
         day_ans = [1000, 1000, 600000, 72000000, 86400000]
         for i, day_test in enumerate(day_test_convert):
             day_conversion = ConversionUtil.get_raw_size(
-                day_test, system=ConversionUtil.DEFAULT_TIME_SYSTEM)
+                day_test, system=PostgresParser.POSTGRES_TIME_SYSTEM)
             self.assertEqual(day_conversion, day_ans[i])
 
     def test_get_human_readable(self):
@@ -274,7 +275,7 @@ class ConversionUtilTest(TestCase):
         byte_ans = ['1PB', '2TB', '3GB', '4MB', '5kB', '6B']
         for i, byte_test in enumerate(byte_test_convert):
             byte_readable = ConversionUtil.get_human_readable(
-                byte_test, system=ConversionUtil.DEFAULT_BYTES_SYSTEM)
+                byte_test, system=PostgresParser.POSTGRES_BYTES_SYSTEM)
             self.assertEqual(byte_readable, byte_ans[i])
 
         # Time
@@ -282,7 +283,7 @@ class ConversionUtilTest(TestCase):
         day_ans = ['500ms', '1s', '55s', '10min', '20h', '1d']
         for i, day_test in enumerate(day_test_convert):
             day_readable = ConversionUtil.get_human_readable(
-                day_test, system=ConversionUtil.DEFAULT_TIME_SYSTEM)
+                day_test, system=PostgresParser.POSTGRES_TIME_SYSTEM)
             self.assertEqual(day_readable, day_ans[i])
 
 

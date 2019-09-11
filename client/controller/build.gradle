@@ -1,10 +1,10 @@
 plugins {
     id "de.undercouch.download" version "3.3.0"
-    id "com.github.spotbugs" version "2.0.0"
 }
 
 apply plugin: 'java'
 apply plugin: 'maven'
+apply plugin: 'findbugs'
 apply plugin: 'application'
 apply plugin: 'project-report'
 
@@ -14,11 +14,18 @@ test.testLogging { exceptionFormat "full"; events "failed", "passed", "skipped" 
 
 repositories {
     mavenCentral()
+    flatDir {
+       dirs 'lib'
+    }
+}
+
+configurations {
+   externalRunTimeJars 
 }
 
 dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.11'
-    runtime fileTree(dir: 'lib', include: '*.jar')
+
     compile group: 'net.sourceforge.collections', name: 'collections-generic', version: '4.01'
     compile group: 'commons-lang', name: 'commons-lang', version: '2.6'
     compile group: 'log4j', name: 'log4j', version: '1.2.17'
@@ -51,9 +58,13 @@ dependencies {
     // https://mvnrepository.com/artifact/org.postgresql/postgresql
     compile group: 'org.postgresql', name: 'postgresql', version: '9.4-1201-jdbc41'
 
-    // This lib has to be manually downloaded from Oracle
-    dependencies {compile files('lib/ojdbc8.jar')}
+    // esgynDB: Need to copy "jdbcT4.jar" into root directory
+    runtime fileTree(dir: '/root', include: '*.jar')
 }
+   
+
+//dependencies {compile files('lib/*.jar')}
+
 
 run {
     if (project.hasProperty("appArgs")) {
@@ -64,16 +75,14 @@ run {
     // args = ["-c","$config","-t","$time","-d","$dir"]
 }
 
-spotbugs {
-    toolVersion = '4.0.0-beta3'
+findbugs {
     ignoreFailures = true
 }
 
-// Note (07-29-2019): the HTML report for spotbugs is currently broken
-tasks.withType(com.github.spotbugs.SpotBugsTask) {
+tasks.withType(FindBugs) {
     reports {
-        xml.enabled true
-        html.enabled false
+        xml.enabled false
+        html.enabled true
     }
 }
 

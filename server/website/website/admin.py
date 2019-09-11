@@ -9,115 +9,113 @@ from djcelery.models import TaskMeta
 from .models import (BackupData, DBMSCatalog, KnobCatalog,
                      KnobData, MetricCatalog, MetricData,
                      PipelineData, PipelineRun, Project,
-                     Result, Session, Workload, Hardware,
-                     SessionKnob)
+                     Result, Session, Workload)
 
 
-class DBMSCatalogAdmin(admin.ModelAdmin):
-    pass
+class BaseAdmin(admin.ModelAdmin):
+
+    @staticmethod
+    def dbms_info(obj):
+        try:
+            return obj.dbms.full_name
+        except AttributeError:
+            return obj.full_name
 
 
-class KnobCatalogAdmin(admin.ModelAdmin):
-    list_display = ('name', 'dbms', 'tunable')
-    list_filter = (('dbms', admin.RelatedOnlyFieldListFilter), 'tunable')
-    ordering = ('dbms', '-tunable', 'name')
+class DBMSCatalogAdmin(BaseAdmin):
+    list_display = ['dbms_info']
 
 
-class MetricCatalogAdmin(admin.ModelAdmin):
-    list_display = ('name', 'dbms', 'metric_type')
-    list_filter = (('dbms', admin.RelatedOnlyFieldListFilter), 'metric_type')
-    ordering = ('dbms', 'name')
+class KnobCatalogAdmin(BaseAdmin):
+    list_display = ['name', 'dbms_info', 'tunable']
+    ordering = ['name', 'dbms__type', 'dbms__version']
+    list_filter = ['tunable']
+
+
+class MetricCatalogAdmin(BaseAdmin):
+    list_display = ['name', 'dbms_info', 'metric_type']
+    ordering = ['name', 'dbms__type', 'dbms__version']
+    list_filter = ['metric_type']
 
 
 class ProjectAdmin(admin.ModelAdmin):
     list_display = ('name', 'user', 'last_update', 'creation_time')
-    list_filter = (('user', admin.RelatedOnlyFieldListFilter),)
-    ordering = ('name', 'user__username')
+    fields = ['name', 'user', 'last_update', 'creation_time']
 
 
 class SessionAdmin(admin.ModelAdmin):
-    list_display = ('name', 'user', 'project', 'last_update', 'creation_time')
-    list_filter = (('user', admin.RelatedOnlyFieldListFilter),
-                   ('project', admin.RelatedOnlyFieldListFilter))
-    ordering = ('name', 'user__username', 'project__name')
+    list_display = ('name', 'user', 'last_update', 'creation_time')
+    list_display_links = ('name',)
 
 
-class SessionKnobAdmin(admin.ModelAdmin):
-    list_display = ('knob', 'dbms', 'session', 'minval', 'maxval', 'tunable')
-    list_filter = (('session__dbms', admin.RelatedOnlyFieldListFilter),
-                   ('session', admin.RelatedOnlyFieldListFilter), ('tunable'))
-    ordering = ('session__dbms', 'session__name', '-tunable', 'knob__name')
-
-    @staticmethod
-    def dbms(obj):
-        return obj.session.dbms
+class KnobDataAdmin(BaseAdmin):
+    list_display = ['name', 'dbms_info', 'creation_time']
+    fields = ['session', 'name', 'creation_time',
+              'knobs', 'data', 'dbms']
 
 
-class HardwareAdmin(admin.ModelAdmin):
-    pass
-
-
-class KnobDataAdmin(admin.ModelAdmin):
-    list_display = ('name', 'dbms', 'session', 'creation_time')
-    list_filter = (('dbms', admin.RelatedOnlyFieldListFilter),
-                   ('session', admin.RelatedOnlyFieldListFilter))
-    ordering = ('creation_time',)
-
-
-class MetricDataAdmin(admin.ModelAdmin):
-    list_display = ('name', 'dbms', 'session', 'creation_time')
-    list_filter = (('dbms', admin.RelatedOnlyFieldListFilter),
-                   ('session', admin.RelatedOnlyFieldListFilter))
-    ordering = ('creation_time',)
+class MetricDataAdmin(BaseAdmin):
+    list_display = ['name', 'dbms_info', 'creation_time']
+    fields = ['session', 'name', 'creation_time',
+              'metrics', 'data', 'dbms']
 
 
 class TaskMetaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'status', 'task_result', 'date_done')
-    readonly_fields = ('id', 'task_id', 'status', 'result', 'date_done',
-                       'traceback', 'hidden', 'meta')
-    fields = readonly_fields
-    list_filter = ('status',)
-    ordering = ('date_done',)
+    list_display = ['id', 'status', 'date_done']
+
+
+class ResultAdmin(BaseAdmin):
+    list_display = ['result_id', 'dbms_info', 'workload', 'creation_time',
+                    'observation_time']
+    list_filter = ['dbms__type', 'dbms__version']
+    ordering = ['id']
 
     @staticmethod
-    def task_result(obj, maxlen=300):
-        res = obj.result
-        if res and len(res) > maxlen:
-            res = res[:maxlen] + '...'
-        return res
+    def result_id(obj):
+        return obj.id
 
-
-class ResultAdmin(admin.ModelAdmin):
-    readonly_fields = ('dbms', 'knob_data', 'metric_data', 'session', 'workload')
-    list_display = ('id', 'dbms', 'session', 'workload', 'creation_time')
-    list_select_related = ('dbms', 'session', 'workload')
-    list_filter = (('dbms', admin.RelatedOnlyFieldListFilter),
-                   ('session', admin.RelatedOnlyFieldListFilter),
-                   ('workload', admin.RelatedOnlyFieldListFilter))
-    ordering = ('creation_time',)
+    @staticmethod
+    def workload(obj):
+        return obj.workload.name
 
 
 class BackupDataAdmin(admin.ModelAdmin):
-    readonly_fields = ('id', 'result')
-    ordering = ('id',)
+    list_display = ['id', 'result_id']
+
+    @staticmethod
+    def result_id(obj):
+        return obj.id
 
 
 class PipelineDataAdmin(admin.ModelAdmin):
-    readonly_fields = ('pipeline_run',)
-    list_display = ('id', 'pipeline_run', 'task_type', 'workload', 'creation_time')
-    list_filter = ('task_type', ('workload', admin.RelatedOnlyFieldListFilter))
-    ordering = ('pipeline_run', 'creation_time')
+    list_display = ['id', 'version', 'task_type', 'workload',
+                    'creation_time']
+    ordering = ['-creation_time']
+
+    @staticmethod
+    def version(obj):
+        return obj.pipeline_run.id
 
 
 class PipelineRunAdmin(admin.ModelAdmin):
-    list_display = ('id', 'start_time', 'end_time')
-    ordering = ('id', 'start_time')
+    list_display = ['id', 'start_time', 'end_time']
+
+
+class PipelineResultAdmin(BaseAdmin):
+    list_display = ['task_type', 'dbms_info',
+                    'hardware_info', 'creation_timestamp']
+
+    @staticmethod
+    def hardware_info(obj):
+        return obj.hardware.name
 
 
 class WorkloadAdmin(admin.ModelAdmin):
-    list_display = ('name', 'dbms', 'hardware')
-    list_filter = (('dbms', admin.RelatedOnlyFieldListFilter),
-                   ('hardware', admin.RelatedOnlyFieldListFilter))
+    list_display = ['workload_id', 'name']
+
+    @staticmethod
+    def workload_id(obj):
+        return obj.pk
 
 
 admin.site.register(DBMSCatalog, DBMSCatalogAdmin)
@@ -133,5 +131,3 @@ admin.site.register(BackupData, BackupDataAdmin)
 admin.site.register(PipelineData, PipelineDataAdmin)
 admin.site.register(PipelineRun, PipelineRunAdmin)
 admin.site.register(Workload, WorkloadAdmin)
-admin.site.register(SessionKnob, SessionKnobAdmin)
-admin.site.register(Hardware, HardwareAdmin)

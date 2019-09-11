@@ -3,6 +3,13 @@
 #
 # Copyright (c) 2017-18, Carnegie Mellon University Database Group
 #
+'''
+Created on Dec 12, 2017
+
+@author: dvanaken
+
+Parser interface.
+'''
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict
@@ -14,24 +21,25 @@ from website.types import BooleanType, MetricType, VarType
 # pylint: disable=no-self-use
 class BaseParser(object, metaclass=ABCMeta):
 
-    def __init__(self, dbms_obj):
-        knobs = KnobCatalog.objects.filter(dbms=dbms_obj)
+    def __init__(self, dbms_id):
+        self.dbms_id_ = dbms_id
+        print(dbms_id)
+        knobs = KnobCatalog.objects.filter(dbms__pk=self.dbms_id_)
+        print("knobs")
+        print(knobs)
         self.knob_catalog_ = {k.name: k for k in knobs}
-        self.tunable_knob_catalog_ = {
-            k: v for k, v in self.knob_catalog_.items() if
-            v.tunable is True}
-
-        metrics = MetricCatalog.objects.filter(dbms=dbms_obj)
+        self.tunable_knob_catalog_ = {k: v for k, v in
+                                      list(self.knob_catalog_.items()) if v.tunable is True}
+        metrics = MetricCatalog.objects.filter(dbms__pk=self.dbms_id_)
+        print("metrics")
+        print(metrics)
         self.metric_catalog_ = {m.name: m for m in metrics}
-        numeric_mtypes = (MetricType.COUNTER, MetricType.STATISTICS)
-        self.numeric_metric_catalog_ = {
-            m: v for m, v in self.metric_catalog_.items() if
-            v.metric_type in numeric_mtypes}
-
-        self.valid_true_val = ("on", "true", "yes")
-        self.valid_false_val = ("off", "false", "no")
-        self.true_value = 'on'
-        self.false_value = 'off'
+        self.numeric_metric_catalog_ = {m: v for m, v in
+                                        list(self.metric_catalog_.items()) if
+                                        v.metric_type == MetricType.COUNTER or
+                                        v.metric_type == MetricType.STATISTICS}
+        self.valid_true_val = list()
+        self.valid_false_val = list()
 
     @abstractproperty
     def base_configuration_settings(self):
@@ -52,49 +60,38 @@ class BaseParser(object, metaclass=ABCMeta):
     def target_metric(self, target_objective=None):
         if target_objective == 'throughput_txn_per_sec' or target_objective is None:
             # throughput
-            res = self.transactions_counter
+            return self.transactions_counter
         elif target_objective == '99th_lat_ms':
             # 99 percentile latency
-            res = self.latency_timer
+            return self.latency_timer
         else:
             raise Exception("Target Objective {} Not Supported".format(target_objective))
-
-        return res
 
     @abstractmethod
     def parse_version_string(self, version_string):
         pass
 
     def convert_bool(self, bool_value, metadata):
-        if isinstance(bool_value, str):
-            bool_value = bool_value.lower()
-
         if bool_value in self.valid_true_val:
-            res = BooleanType.TRUE
+            return BooleanType.TRUE
         elif bool_value in self.valid_false_val:
-            res = BooleanType.FALSE
+            return BooleanType.FALSE
         else:
             raise Exception("Invalid Boolean {}".format(bool_value))
-
-        return res
 
     def convert_enum(self, enum_value, metadata):
         enumvals = metadata.enumvals.split(',')
         try:
-            res = enumvals.index(enum_value)
+            return enumvals.index(enum_value)
         except ValueError:
             raise Exception('Invalid enum value for variable {} ({})'.format(
                 metadata.name, enum_value))
 
-        return res
-
     def convert_integer(self, int_value, metadata):
         try:
-            res = int(int_value)
+            return int(int_value)
         except ValueError:
-            res = int(float(int_value))
-
-        return res
+            return int(float(int_value))
 
     def convert_real(self, real_value, metadata):
         return float(real_value)
@@ -123,7 +120,6 @@ class BaseParser(object, metaclass=ABCMeta):
                 continue
             value = knobs[name]
             conv_value = None
-
             if metadata.vartype == VarType.BOOL:
                 if not self._check_knob_bool_val(value):
                     raise Exception('Knob boolean value not valid! '
@@ -132,10 +128,8 @@ class BaseParser(object, metaclass=ABCMeta):
                                     .format(self.valid_boolean_val_to_string(),
                                             str(value)))
                 conv_value = self.convert_bool(value, metadata)
-
             elif metadata.vartype == VarType.ENUM:
                 conv_value = self.convert_enum(value, metadata)
-
             elif metadata.vartype == VarType.INTEGER:
                 conv_value = self.convert_integer(value, metadata)
                 if not self._check_knob_num_in_range(conv_value, metadata):
@@ -143,7 +137,6 @@ class BaseParser(object, metaclass=ABCMeta):
                                     'min: {}, max: {}, actual: {}'
                                     .format(metadata.minval,
                                             metadata.maxval, str(conv_value)))
-
             elif metadata.vartype == VarType.REAL:
                 conv_value = self.convert_real(value, metadata)
                 if not self._check_knob_num_in_range(conv_value, metadata):
@@ -151,29 +144,23 @@ class BaseParser(object, metaclass=ABCMeta):
                                     'min: {}, max: {}, actual: {}'
                                     .format(metadata.minval,
                                             metadata.maxval, str(conv_value)))
-
             elif metadata.vartype == VarType.STRING:
                 conv_value = self.convert_string(value, metadata)
-
             elif metadata.vartype == VarType.TIMESTAMP:
                 conv_value = self.convert_timestamp(value, metadata)
-
             else:
                 raise Exception(
                     'Unknown variable type: {}'.format(metadata.vartype))
-
             if conv_value is None:
-                raise Exception('Param value for {} cannot be null'.format(name))
+                raise Exception(
+                    'Param value for {} cannot be null'.format(name))
             knob_data[name] = conv_value
-
         return knob_data
 
     def _check_knob_num_in_range(self, value, mdata):
         return value >= float(mdata.minval) and value <= float(mdata.maxval)
 
     def _check_knob_bool_val(self, value):
-        if isinstance(str, value):
-            value = value.lower()
         return value in self.valid_true_val or value in self.valid_false_val
 
     def convert_dbms_metrics(self, metrics, observation_time, target_objective=None):
@@ -191,7 +178,16 @@ class BaseParser(object, metaclass=ABCMeta):
             else:
                 raise Exception(
                     'Unknown metric type for {}: {}'.format(name, metadata.metric_type))
-
+        print("target_objective")
+        print(target_objective) #debug
+        print('metric_data')
+        print(metric_data) #debug
+        print('self.numeric_metric_catalog.items')
+        print(list(self.numeric_metric_catalog_.items())) #debug
+        print('metrics')
+        print(metrics)
+        print('observation_time')
+        print(observation_time)
         if target_objective is not None and self.target_metric(target_objective) not in metric_data:
             raise Exception("Cannot find objective function")
 
@@ -349,7 +345,7 @@ class BaseParser(object, metaclass=ABCMeta):
         return nondefault_settings
 
     def format_bool(self, bool_value, metadata):
-        return self.true_value if bool_value == BooleanType.TRUE else self.false_value
+        return 'on' if bool_value == BooleanType.TRUE else 'off'
 
     def format_enum(self, enum_value, metadata):
         enumvals = metadata.enumvals.split(',')
@@ -396,11 +392,11 @@ class BaseParser(object, metaclass=ABCMeta):
         return formatted_knobs
 
     def filter_numeric_metrics(self, metrics):
-        return OrderedDict(((k, v) for k, v in list(metrics.items()) if
-                            k in self.numeric_metric_catalog_))
+        return OrderedDict([(k, v) for k, v in list(metrics.items()) if
+                            k in self.numeric_metric_catalog_])
 
     def filter_tunable_knobs(self, knobs):
-        return OrderedDict(((k, v) for k, v in list(knobs.items()) if
-                            k in self.tunable_knob_catalog_))
+        return OrderedDict([(k, v) for k, v in list(knobs.items()) if
+                            k in self.tunable_knob_catalog_])
 
 # pylint: enable=no-self-use

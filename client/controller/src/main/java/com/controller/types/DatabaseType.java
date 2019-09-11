@@ -18,7 +18,7 @@ public enum DatabaseType {
   MYROCKS("com.mysql.jdbc.Driver"),
   POSTGRES("org.postgresql.Driver"),
   SAPHANA("com.sap.db.jdbc.Driver"),
-  ORACLE("oracle.jdbc.driver.OracleDriver");
+  ESGYNDB("org.trafodion.jdbc.t4.T4Driver");
 
   private DatabaseType(String driver) {
     this.driver = driver;

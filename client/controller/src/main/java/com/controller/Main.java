@@ -8,14 +8,15 @@ package com.controller;
 
 import com.controller.collectors.DBCollector;
 import com.controller.collectors.MySQLCollector;
-import com.controller.collectors.OracleCollector;
 import com.controller.collectors.PostgresCollector;
 import com.controller.collectors.SAPHanaCollector;
+import com.controller.collectors.ESGYNDBCollector;
 import com.controller.types.JSONSchemaType;
 import com.controller.util.FileUtil;
 import com.controller.util.JSONUtil;
 import com.controller.util.json.JSONException;
 import com.controller.util.json.JSONObject;
+import com.github.fge.jsonschema.core.exceptions.ProcessingException;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -66,7 +67,7 @@ public class Main {
 
     // Initialize firstCollecting
     firstCollecting = false;
-
+    
     // Create the command line parser
     CommandLineParser parser = new PosixParser();
     Options options = new Options();
@@ -123,15 +124,11 @@ public class Main {
     ControllerConfiguration config = null;
     try {
       JSONObject input = new JSONObject(FileUtil.readFile(configFile));
-      config =
-          new ControllerConfiguration(
-              input.getString("database_type"),
-              input.getString("username"),
-              input.getString("password"),
-              input.getString("database_url"),
-              input.getString("upload_code"),
-              input.getString("upload_url"),
-              input.getString("workload_name"));
+      config = new ControllerConfiguration(
+          input.getString("database_type"), input.getString("username"),
+          input.getString("password"), input.getString("database_url"),
+          input.getString("upload_code"), input.getString("upload_url"),
+          input.getString("workload_name"));
     } catch (JSONException e) {
       e.printStackTrace();
     }
@@ -170,7 +167,7 @@ public class Main {
         LOG.error("Invalid output JSON format (metrics_before)");
         return;
       }
-      PrintWriter metricsWriter =
+      PrintWriter metricsWriter = 
           new PrintWriter(FileUtil.joinPath(outputDirectory, "metrics_before.json"), "UTF-8");
       metricsWriter.println(metricsBefore);
       metricsWriter.close();
@@ -253,7 +250,8 @@ public class Main {
       outfiles.put("metrics_after", FileUtil.joinPath(outputDirectory, "metrics_after.json"));
       outfiles.put("summary", FileUtil.joinPath(outputDirectory, "summary.json"));
       try {
-        ResultUploader.upload(config.getUploadURL(), config.getUploadCode(), outfiles);
+        ResultUploader.upload(
+                config.getUploadURL(), config.getUploadCode(), outfiles);
       } catch (IOException ioe) {
         LOG.warn("Failed to upload results from the controller");
       }
@@ -277,15 +275,18 @@ public class Main {
         break;
       case MYSQL:
         collector =
-            new MySQLCollector(config.getDBURL(), config.getDBUsername(), config.getDBPassword());
+            new MySQLCollector(
+                config.getDBURL(), config.getDBUsername(), config.getDBPassword());
         break;
       case SAPHANA:
         collector =
-            new SAPHanaCollector(config.getDBURL(), config.getDBUsername(), config.getDBPassword());
+            new SAPHanaCollector(
+                config.getDBURL(), config.getDBUsername(), config.getDBPassword());
         break;
-      case ORACLE:
+      case ESGYNDB:
         collector =
-            new OracleCollector(config.getDBURL(), config.getDBUsername(), config.getDBPassword());
+            new ESGYNDBCollector(
+                config.getDBURL(), config.getDBUsername(), config.getDBPassword());
         break;
       default:
         LOG.error("Invalid database type");
@@ -294,3 +295,4 @@ public class Main {
     return collector;
   }
 }
+

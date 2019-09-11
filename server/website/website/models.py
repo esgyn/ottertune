@@ -10,9 +10,8 @@ from django.core.validators import validate_comma_separated_integer_list
 from django.db import models, DEFAULT_DB_ALIAS
 from django.utils.timezone import now
 
-from .types import (DBMSType, LabelStyleType, MetricType, KnobUnitType,
-                    PipelineTaskType, VarType, KnobResourceType,
-                    WorkloadStatusType)
+from .types import (DBMSType, LabelStyleType, MetricType, HardwareType,
+                    KnobUnitType, PipelineTaskType, VarType, KnobResourceType)
 
 
 class BaseModel(models.Model):
@@ -21,7 +20,7 @@ class BaseModel(models.Model):
         return self.__unicode__()
 
     def __unicode__(self):
-        return getattr(self, 'name', str(self.pk))
+        return self.name
 
     @classmethod
     def get_labels(cls, style=LabelStyleType.DEFAULT_STYLE):
@@ -98,8 +97,8 @@ class MetricManager(models.Manager):
     # Possible objective functions
     THROUGHPUT = 'throughput_txn_per_sec'
     THROUGHPUT_META = (THROUGHPUT, 'Throughput',
-                       'transactions / second',
-                       'txn/sec', 1, MORE_IS_BETTER)
+                       'transactions / mins',
+                       'txn/mins', 1, MORE_IS_BETTER)
 
     LATENCY_99 = '99th_lat_ms'
     LATENCY_99_META = (LATENCY_99, '99 Percentile Latency',
@@ -167,7 +166,7 @@ class Project(BaseModel):
 
 
 class Hardware(BaseModel):
-    type = models.IntegerField()
+    type = models.IntegerField(choices=HardwareType.choices())
     name = models.CharField(max_length=32)
     cpu = models.IntegerField()
     memory = models.FloatField()
@@ -177,7 +176,7 @@ class Hardware(BaseModel):
     additional_specs = models.TextField(null=True)
 
     def __unicode__(self):
-        return 'CPU:{}, RAM:{}, Storage:{}'.format(self.cpu, self.memory, self.storage)
+        return HardwareType.TYPE_NAMES[self.type]
 
 
 class Session(BaseModel):
@@ -219,36 +218,6 @@ class Session(BaseModel):
         for r in results:
             r.delete()
         super(Session, self).delete(using=DEFAULT_DB_ALIAS, keep_parents=False)
-
-
-class SessionKnobManager(models.Manager):
-    @staticmethod
-    def get_knobs_for_session(session):
-        # Returns a dict of the knob
-        knobs = KnobCatalog.objects.filter(dbms=session.dbms)
-        knob_dicts = list(knobs.values())
-        for i, _ in enumerate(knob_dicts):
-            if SessionKnob.objects.filter(session=session, knob=knobs[i]).exists():
-                new_knob = SessionKnob.objects.filter(session=session, knob=knobs[i])[0]
-                knob_dicts[i]["minval"] = new_knob.minval
-                knob_dicts[i]["maxval"] = new_knob.maxval
-                knob_dicts[i]["tunable"] = new_knob.tunable
-        knob_dicts = [knob for knob in knob_dicts if knob["tunable"]]
-        return knob_dicts
-
-
-class SessionKnob(BaseModel):
-
-    @property
-    def name(self):
-        return self.knob.name
-
-    objects = SessionKnobManager()
-    session = models.ForeignKey(Session)
-    knob = models.ForeignKey(KnobCatalog)
-    minval = models.CharField(max_length=32, null=True, verbose_name="minimum value")
-    maxval = models.CharField(max_length=32, null=True, verbose_name="maximum value")
-    tunable = models.BooleanField(verbose_name="tunable")
 
 
 class DataModel(BaseModel):
@@ -333,9 +302,6 @@ class Workload(BaseModel):
     dbms = models.ForeignKey(DBMSCatalog)
     hardware = models.ForeignKey(Hardware)
     name = models.CharField(max_length=128, verbose_name='workload name')
-    status = models.IntegerField(choices=WorkloadStatusType.choices(),
-                                 default=WorkloadStatusType.MODIFIED,
-                                 editable=False)
 
     def delete(self, using=DEFAULT_DB_ALIAS, keep_parents=False):
         # The results should not have corresponding workloads.
@@ -422,18 +388,12 @@ class PipelineRun(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField(null=True)
 
-    def __unicode__(self):
-        return str(self.pk)
-
-    def __str__(self):
-        return self.__unicode__()
-
     class Meta:  # pylint: disable=old-style-class,no-init
         ordering = ["-id"]
 
 
 class PipelineData(models.Model):
-    pipeline_run = models.ForeignKey(PipelineRun, verbose_name='group')
+    pipeline_run = models.ForeignKey(PipelineRun)
     task_type = models.IntegerField(choices=PipelineTaskType.choices())
     workload = models.ForeignKey(Workload)
     data = models.TextField()
